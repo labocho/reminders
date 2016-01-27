@@ -110,23 +110,37 @@ class AddReminderCommand: Subcommand {
       helpDescription: "Calendar name"
     )
 
-    let parser = OptionParser(definitions: [calendarOption])
+    let dateOption = Option(
+      trigger: OptionTrigger.Mixed("d", "date"),
+      numberOfParameters: 1,
+      helpDescription: "Due date (HH)"
+    )
+
+    let parser = OptionParser(definitions: [calendarOption, dateOption])
     let (options, rest) = parseOptions(parser, arguments)
+
+    let date: NSDateComponents?
+    if options[dateOption] != nil {
+      date = parseDate(options[dateOption]![0])
+    } else {
+      date = nil
+    }
 
     let title:String
     if rest.count > 0 {
-      title = rest[0]
+      title = rest.joinWithSeparator(" ")
     } else {
       title = ""
     }
-    let reminder = addReminder(store, title, options)
+    let reminder = addReminder(store, title, date: date)
     print(Formatter().formatReminder(reminder))
   }
 
-  func addReminder(store: EKEventStore, _ title: String, _ options: [Option: [String]]) -> EKReminder {
+  func addReminder(store: EKEventStore, _ title: String, date: NSDateComponents?) -> EKReminder {
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = store.defaultCalendarForNewReminders()
     reminder.title = title
+    reminder.dueDateComponents = date
 
     do {
       try store.saveReminder(reminder, commit: true)
@@ -136,6 +150,30 @@ class AddReminderCommand: Subcommand {
     }
 
     return reminder
+  }
+
+  // 23 # next 23:00
+  func parseDate(dateString: String) -> NSDateComponents {
+    let hour = Int(dateString)!
+    let calendar = NSCalendar.currentCalendar()
+    let date = calendar.components(
+      [ NSCalendarUnit.Year,
+        NSCalendarUnit.Month,
+        NSCalendarUnit.Day,
+        NSCalendarUnit.Hour,
+        NSCalendarUnit.Minute,
+        NSCalendarUnit.Second,
+      ],
+      fromDate: NSDate() // now
+    )
+
+    if hour < date.hour  {
+      date.day += 1
+    }
+    date.hour = hour
+    date.minute = 0
+    date.second = 0
+    return date
   }
 }
 
