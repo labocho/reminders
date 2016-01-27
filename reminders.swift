@@ -1,9 +1,9 @@
 #!/usr/bin/env swift -FCarthage/Build/Mac
 
-import OptionKit
 import CoreFoundation
 import EventKit
-
+import OptionKit
+import Regex
 
 // 非同期の処理を 1 つ含む関数 f を同期的に実行
 // 非同期処理が終わったら引数として渡した関数を呼ぶ必要がある
@@ -153,26 +153,56 @@ class AddReminderCommand: Subcommand {
   }
 
   // 23 # next 23:00
-  func parseDate(dateString: String) -> NSDateComponents {
-    let hour = Int(dateString)!
-    let calendar = NSCalendar.currentCalendar()
-    let date = calendar.components(
-      [ NSCalendarUnit.Year,
-        NSCalendarUnit.Month,
-        NSCalendarUnit.Day,
-        NSCalendarUnit.Hour,
-        NSCalendarUnit.Minute,
-        NSCalendarUnit.Second,
-      ],
-      fromDate: NSDate() // now
-    )
-
-    if hour < date.hour  {
-      date.day += 1
+  // 23:15 # next 23:15
+  // 3d # 24h * 3 later
+  // 3d11:15 # 11:15 at 3d since
+  func parseDate(dateString: String, _ dateOrNil: NSDateComponents? = nil) -> NSDateComponents {
+    let date: NSDateComponents
+    if dateOrNil != nil {
+      date = dateOrNil!
+    } else {
+      date = NSCalendar.currentCalendar().components(
+        [ NSCalendarUnit.Year,
+          NSCalendarUnit.Month,
+          NSCalendarUnit.Day,
+          NSCalendarUnit.Hour,
+          NSCalendarUnit.Minute,
+          NSCalendarUnit.Second,
+        ],
+        fromDate: NSDate() // now
+      )
     }
-    date.hour = hour
-    date.minute = 0
-    date.second = 0
+
+    switch dateString {
+    case Regex("^(\\d?\\d)$"):
+      let hour = Int(Regex.lastMatch!.captures[0]!)!
+      if dateOrNil == nil && hour < date.hour  {
+        date.day += 1
+      }
+      date.hour = hour
+      date.minute = 0
+      date.second = 0
+    case Regex("^(\\d?\\d):(\\d?\\d)$"):
+      let hour = Int(Regex.lastMatch!.captures[0]!)!
+      let minute = Int(Regex.lastMatch!.captures[1]!)!
+      if dateOrNil == nil && (hour * 60 + minute) < (date.hour * 60 + date.minute)  {
+        date.day += 1
+      }
+      date.hour = hour
+      date.minute = minute
+      date.second = 0
+    case Regex("^(\\d+)d(.*)"):
+      let days = Int(Regex.lastMatch!.captures[0]!)!
+      let rest = Regex.lastMatch!.captures[1]!
+      date.day += days
+      if rest.characters.count > 0 {
+        return parseDate(rest, date)
+      }
+    default:
+      print("invalid date")
+      exit(EXIT_FAILURE)
+    }
+
     return date
   }
 }
