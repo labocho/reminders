@@ -185,7 +185,19 @@ class AddReminderCommand: Subcommand {
       helpDescription: "Due date (HH)"
     )
 
-    let parser = OptionParser(definitions: [calendarOption, dateOption])
+    let latOption = Option(
+      trigger: OptionTrigger.Long("latitude"),
+      numberOfParameters: 1,
+      helpDescription: "Latitude"
+    )
+
+    let lngOption = Option(
+      trigger: OptionTrigger.Long("longitude"),
+      numberOfParameters: 1,
+      helpDescription: "Longitude"
+    )
+
+    let parser = OptionParser(definitions: [calendarOption, dateOption, latOption, lngOption])
     let (options, rest) = parseOptions(parser, arguments)
 
     let date: NSDateComponents?
@@ -195,21 +207,45 @@ class AddReminderCommand: Subcommand {
       date = nil
     }
 
+    let location: CLLocation?
+    if options[latOption] != nil && options[lngOption] != nil {
+      location = CLLocation(
+        latitude: Double(options[latOption]![0])!,
+        longitude: Double(options[lngOption]![0])!
+      )
+    } else {
+      location = nil
+    }
+
     let title:String
     if rest.count > 0 {
       title = rest.joinWithSeparator(" ")
     } else {
       title = ""
     }
-    let reminder = addReminder(store, title, date: date)
+    let reminder = addReminder(store, title, date: date, location: location)
     print(Formatter().formatReminder(reminder))
   }
 
-  func addReminder(store: EKEventStore, _ title: String, date: NSDateComponents?) -> EKReminder {
+  func addReminder(store: EKEventStore, _ title: String, date: NSDateComponents?, location: CLLocation?) -> EKReminder {
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = store.defaultCalendarForNewReminders()
     reminder.title = title
     reminder.dueDateComponents = date
+
+    if location != nil {
+      let alarm: EKAlarm
+      if date != nil {
+        alarm = EKAlarm(absoluteDate: NSCalendar.currentCalendar().dateFromComponents(date!)!)
+      } else {
+        alarm = EKAlarm(relativeOffset: 0)
+      }
+      let structuredLocation = EKStructuredLocation(title: String(location!.coordinate.latitude) + "," + String(location!.coordinate.longitude))
+      structuredLocation.geoLocation = location!
+      alarm.structuredLocation = structuredLocation
+      alarm.proximity = .Enter
+      reminder.addAlarm(alarm)
+    }
 
     do {
       try store.saveReminder(reminder, commit: true)
