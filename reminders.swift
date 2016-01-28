@@ -4,6 +4,7 @@ import CoreFoundation
 import EventKit
 import OptionKit
 import Regex
+import SwiftyJSON
 
 // 非同期の処理を 1 つ含む関数 f を同期的に実行
 // 非同期処理が終わったら引数として渡した関数を呼ぶ必要がある
@@ -53,6 +54,63 @@ class Formatter {
   }
 }
 
+class JSONFormatter: Formatter {
+  override func formatReminder(reminder: EKReminder) -> String {
+    var json: JSON = [:]
+    json["calendarItemIdentifier"].string = reminder.calendarItemIdentifier
+    if reminder.startDateComponents != nil {
+      json["startDateComponents"].string = formatDate(reminder.startDateComponents, format: "yyyy-MM-dd'T'HH:mm:ssZ")
+    }
+    json["title"].string = reminder.title
+    if reminder.hasAlarms {
+      let alarms: [JSON] = reminder.alarms!.map { (alarm) -> JSON in
+        var a: JSON = [:]
+        if alarm.absoluteDate != nil {
+          let components = NSCalendar.currentCalendar().components(
+            [ NSCalendarUnit.Year,
+              NSCalendarUnit.Month,
+              NSCalendarUnit.Day,
+              NSCalendarUnit.Hour,
+              NSCalendarUnit.Minute,
+              NSCalendarUnit.Second,
+            ],
+            fromDate: alarm.absoluteDate!
+          )
+          a["absoluteDate"].string = formatDate(components, format: "yyyy-MM-dd")
+        }
+        a["relativeOffset"].double = alarm.relativeOffset
+
+        if alarm.structuredLocation != nil {
+          let structuredLocation = alarm.structuredLocation!
+          var s: JSON = [:]
+          s["title"].string = structuredLocation.title
+          s["radius"].double = structuredLocation.radius
+
+          if let geoLocation = structuredLocation.geoLocation {
+            var g: JSON = [:]
+            g["coordinate"] = ["latitude": geoLocation.coordinate.latitude, "longitude": geoLocation.coordinate.longitude]
+            s["geoLocation"] = g
+          }
+          a["structuredLocation"] = s
+        }
+
+        switch alarm.proximity {
+        case .None:
+          a["proximity"] = "none"
+        case .Enter:
+          a["proximity"] = "enter"
+        case .Leave:
+          a["proximity"] = "leave"
+        }
+        return a
+      }
+      json["alarms"] = JSON(alarms)
+    }
+
+    return json.rawString(NSUTF8StringEncoding, options: [])!
+  }
+}
+
 class Subcommand {
   func parseOptions(parser: OptionParser, _ arguments: Array<String>) -> ParseData {
     do {
@@ -75,12 +133,23 @@ class ListRemindersCommand: Subcommand {
       numberOfParameters: 1,
       helpDescription: "Calendar name"
     )
+    let jsonOption = Option(
+      trigger: OptionTrigger.Mixed("j", "json"),
+      numberOfParameters: 0,
+      helpDescription: "Display as JSON lines"
+    )
 
-    let parser = OptionParser(definitions: [calendarOption])
+    let parser = OptionParser(definitions: [calendarOption, jsonOption])
     let (options, _) = parseOptions(parser, arguments)
+    let formatter: Formatter
+    if options[jsonOption] != nil {
+      formatter = JSONFormatter()
+    } else {
+      formatter = Formatter()
+    }
 
     eachReminder(store, options) { reminder in
-      print(Formatter().formatReminder(reminder))
+      print(formatter.formatReminder(reminder))
     }
   }
 
