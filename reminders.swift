@@ -231,19 +231,24 @@ class AddReminderCommand: Subcommand {
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = store.defaultCalendarForNewReminders()
     reminder.title = title
-    reminder.dueDateComponents = date
+    reminder.startDateComponents = date
 
-    if location != nil {
+    if location != nil || date != nil{
       let alarm: EKAlarm
+
       if date != nil {
         alarm = EKAlarm(absoluteDate: NSCalendar.currentCalendar().dateFromComponents(date!)!)
       } else {
         alarm = EKAlarm(relativeOffset: 0)
       }
-      let structuredLocation = EKStructuredLocation(title: String(location!.coordinate.latitude) + "," + String(location!.coordinate.longitude))
-      structuredLocation.geoLocation = location!
-      alarm.structuredLocation = structuredLocation
-      alarm.proximity = .Enter
+
+      if location != nil {
+        let structuredLocation = EKStructuredLocation(title: String(location!.coordinate.latitude) + "," + String(location!.coordinate.longitude))
+        structuredLocation.geoLocation = location!
+        alarm.structuredLocation = structuredLocation
+        alarm.proximity = .Enter
+      }
+
       reminder.addAlarm(alarm)
     }
 
