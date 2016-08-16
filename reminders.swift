@@ -133,14 +133,26 @@ class ListRemindersCommand: Subcommand {
       numberOfParameters: 1,
       helpDescription: "Calendar name"
     )
+
     let jsonOption = Option(
       trigger: OptionTrigger.Mixed("j", "json"),
       numberOfParameters: 0,
       helpDescription: "Display as JSON lines"
     )
 
-    let parser = OptionParser(definitions: [calendarOption, jsonOption])
+    let helpOption = Option(
+      trigger: OptionTrigger.Mixed("h", "help"),
+      helpDescription: "Display help for subcommand"
+    )
+
+    let parser = OptionParser(definitions: [calendarOption, jsonOption, helpOption])
     let (options, _) = parseOptions(parser, arguments)
+
+    if options[helpOption] != nil {
+      print(parser.helpStringForCommandName("reminders ls"))
+      return
+    }
+
     let formatter: Formatter
     if options[jsonOption] != nil {
       formatter = JSONFormatter()
@@ -197,8 +209,18 @@ class AddReminderCommand: Subcommand {
       helpDescription: "Longitude"
     )
 
-    let parser = OptionParser(definitions: [calendarOption, dateOption, latOption, lngOption])
+    let helpOption = Option(
+      trigger: OptionTrigger.Mixed("h", "help"),
+      helpDescription: "Display help for subcommand"
+    )
+
+    let parser = OptionParser(definitions: [calendarOption, dateOption, latOption, lngOption, helpOption])
     let (options, rest) = parseOptions(parser, arguments)
+
+    if options[helpOption] != nil {
+      print(parser.helpStringForCommandName("reminders add"))
+      return
+    }
 
     let date: NSDateComponents?
     if options[dateOption] != nil {
@@ -228,6 +250,11 @@ class AddReminderCommand: Subcommand {
   }
 
   func addReminder(store: EKEventStore, _ title: String, date: NSDateComponents?, location: CLLocation?) -> EKReminder {
+    if title == "" {
+      print("Error: title required")
+      exit(EXIT_FAILURE)
+    }
+
     let reminder = EKReminder(eventStore: store)
     reminder.calendar = store.defaultCalendarForNewReminders()
     reminder.title = title
@@ -255,7 +282,7 @@ class AddReminderCommand: Subcommand {
     do {
       try store.saveReminder(reminder, commit: true)
     } catch {
-      print("save failed")
+      print("Error: save failed")
       exit(EXIT_FAILURE)
     }
 
@@ -349,18 +376,19 @@ class ListCalendarsCommand: Subcommand {
 func main() {
   var arguments = Array((Process.arguments[1..<Process.arguments.count]))
   let subcommand: String
+  let help = "Usage: reminders <subcommand> [<args>]\n       (available subcommands: add, cal, ls)"
 
   if arguments.count > 0 {
     subcommand = arguments[0]
   } else {
-    print("subcommand required")
+    print(help)
     exit(EXIT_FAILURE)
   }
   arguments.removeAtIndex(0)
 
   guard let store = createStore() else {
-    print("cannot access reminders")
-    exit(1)
+    print("Error: cannot access reminders")
+    exit(EXIT_FAILURE)
   }
 
   switch subcommand {
@@ -371,7 +399,7 @@ func main() {
     case "add":
       AddReminderCommand().run(store, arguments)
     default:
-      print("unknow subcommand")
+      print(help)
       exit(EXIT_FAILURE)
   }
 }
