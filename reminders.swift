@@ -264,6 +264,8 @@ class AddReminderCommand: Subcommand {
 
   // 23 # next 23:00
   // 23:15 # next 23:15
+  // +3 # 3 hours later
+  // +3:10 # 3 hours and 10 minutes later
   // 3d # 24h * 3 later
   // 3d11:15 # 11:15 at 3d since
   func parseDate(dateString: String, _ dateOrNil: NSDateComponents? = nil) -> NSDateComponents {
@@ -301,6 +303,14 @@ class AddReminderCommand: Subcommand {
       date.hour = hour
       date.minute = minute
       date.second = 0
+    case Regex("^\\+(\\d?\\d)$"):
+      let hour = Int(Regex.lastMatch!.captures[0]!)!
+      date.hour += hour
+    case Regex("^(\\d?\\d):(\\d?\\d)$"):
+      let hour = Int(Regex.lastMatch!.captures[0]!)!
+      let minute = Int(Regex.lastMatch!.captures[1]!)!
+      date.hour += hour
+      date.minute += minute
     case Regex("^(\\d+)d(.*)"):
       let days = Int(Regex.lastMatch!.captures[0]!)!
       let rest = Regex.lastMatch!.captures[1]!
